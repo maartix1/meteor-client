@@ -16,6 +16,7 @@ import meteordevelopment.orbit.EventPriority;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -24,12 +25,15 @@ import static meteordevelopment.meteorclient.MeteorClient.mc;
 public class BlockIterator {
     private static final Pool<Callback> callbackPool = new Pool<>(Callback::new);
     private static final List<Callback> callbacks = new ReferenceArrayList<>();
+    private static final List<Callback> pendingCallbacks = new ReferenceArrayList<>();
 
     private static final List<Runnable> afterCallbacks = new ReferenceArrayList<>();
 
     private static final BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
     private static int hRadius, vRadius;
+    private static int pendingHRadius, pendingVRadius;
 
+    private static boolean processing;
     private static boolean disableCurrent;
 
     private BlockIterator() {
@@ -43,6 +47,8 @@ public class BlockIterator {
     @EventHandler(priority = EventPriority.LOWEST - 1)
     private static void onTick(TickEvent.Pre event) {
         if (!Utils.canUpdate()) return;
+
+        processing = true;
 
         int px = mc.player.getBlockX();
         int py = mc.player.getBlockY();
@@ -61,16 +67,20 @@ public class BlockIterator {
                     int dy = Math.abs(y - py);
                     int dz = Math.abs(z - pz);
 
-                    callbacks.removeIf(callback -> {
+                    Iterator<Callback> iterator = callbacks.iterator();
+                    while (iterator.hasNext()) {
+                        Callback callback = iterator.next();
+
                         if (dx <= callback.hRadius && dy <= callback.vRadius && dz <= callback.hRadius) {
                             disableCurrent = false;
                             callback.function.accept(blockPos, blockState);
 
-                            if (disableCurrent) callbackPool.free(callback);
-                            return disableCurrent;
+                            if (disableCurrent) {
+                                iterator.remove();
+                                callbackPool.free(callback);
+                            }
                         }
-                        return false;
-                    });
+                    }
                 }
             }
         }
@@ -81,21 +91,35 @@ public class BlockIterator {
         callbackPool.freeAll(callbacks);
         callbacks.clear();
 
+        callbacks.addAll(pendingCallbacks);
+        pendingCallbacks.clear();
+        hRadius = pendingHRadius;
+        vRadius = pendingVRadius;
+        pendingHRadius = 0;
+        pendingVRadius = 0;
+
+        processing = false;
+
         for (Runnable callback : afterCallbacks) callback.run();
         afterCallbacks.clear();
     }
 
     public static void register(int horizontalRadius, int verticalRadius, BiConsumer<BlockPos, BlockState> function) {
-        hRadius = Math.max(hRadius, horizontalRadius);
-        vRadius = Math.max(vRadius, verticalRadius);
-
         Callback callback = callbackPool.get();
 
         callback.function = function;
         callback.hRadius = horizontalRadius;
         callback.vRadius = verticalRadius;
 
-        callbacks.add(callback);
+        if (processing) {
+            pendingHRadius = Math.max(pendingHRadius, horizontalRadius);
+            pendingVRadius = Math.max(pendingVRadius, verticalRadius);
+            pendingCallbacks.add(callback);
+        } else {
+            hRadius = Math.max(hRadius, horizontalRadius);
+            vRadius = Math.max(vRadius, verticalRadius);
+            callbacks.add(callback);
+        }
     }
 
     public static void disableCurrent() {
