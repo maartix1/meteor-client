@@ -17,6 +17,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Iterator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -25,6 +26,7 @@ import static meteordevelopment.meteorclient.MeteorClient.mc;
 public class BlockIterator {
     private static final Pool<Callback> callbackPool = new Pool<>(Callback::new);
     private static final List<Callback> callbacks = new ReferenceArrayList<>();
+    private static final List<Callback> pendingCallbacks = new ReferenceArrayList<>();
     private static final List<Callback> pendingCallbacks = new ReferenceArrayList<>();
 
     private static final List<Runnable> afterCallbacks = new ReferenceArrayList<>();
@@ -35,6 +37,7 @@ public class BlockIterator {
 
     private static boolean processing;
     private static boolean disableCurrent;
+    private static boolean processing;
 
     private BlockIterator() {
     }
@@ -48,18 +51,17 @@ public class BlockIterator {
     private static void onTick(TickEvent.Pre event) {
         if (!Utils.canUpdate()) return;
 
+        int px = mc.player.getBlockX(), py = mc.player.getBlockY(), pz = mc.player.getBlockZ();
+        int scanHRadius = hRadius, scanVRadius = vRadius;
+        hRadius = 0;
+        vRadius = 0;
         processing = true;
 
         try {
-            int px = mc.player.getBlockX();
-            int py = mc.player.getBlockY();
-            int pz = mc.player.getBlockZ();
-
-            scan:
-            for (int x = px - hRadius; x <= px + hRadius; x++) {
-                for (int z = pz - hRadius; z <= pz + hRadius; z++) {
-                    for (int y = Math.max(mc.level.getMinY(), py - vRadius); y <= py + vRadius; y++) {
-                        if (callbacks.isEmpty() || y > mc.level.getMinY() + mc.level.getHeight() - 1) break scan;
+            for (int x = px - scanHRadius; x <= px + scanHRadius; x++) {
+                for (int z = pz - scanHRadius; z <= pz + scanHRadius; z++) {
+                    for (int y = Math.max(mc.level.getMinY(), py - scanVRadius); y <= py + scanVRadius; y++) {
+                        if (y > mc.level.getMaxY()) break;
 
                         blockPos.set(x, y, z);
                         BlockState blockState = mc.level.getBlockState(blockPos);
@@ -86,20 +88,11 @@ public class BlockIterator {
                 }
             }
         } finally {
-            hRadius = 0;
-            vRadius = 0;
-
+            processing = false;
             callbackPool.freeAll(callbacks);
             callbacks.clear();
-
             callbacks.addAll(pendingCallbacks);
             pendingCallbacks.clear();
-            hRadius = pendingHRadius;
-            vRadius = pendingVRadius;
-            pendingHRadius = 0;
-            pendingVRadius = 0;
-
-            processing = false;
         }
 
         for (Runnable callback : afterCallbacks) callback.run();
@@ -120,7 +113,8 @@ public class BlockIterator {
         } else {
             hRadius = Math.max(hRadius, horizontalRadius);
             vRadius = Math.max(vRadius, verticalRadius);
-            callbacks.add(callback);
+            if (processing) pendingCallbacks.add(callback);
+        else callbacks.add(callback);
         }
     }
 
