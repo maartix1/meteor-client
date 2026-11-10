@@ -50,55 +50,57 @@ public class BlockIterator {
 
         processing = true;
 
-        int px = mc.player.getBlockX();
-        int py = mc.player.getBlockY();
-        int pz = mc.player.getBlockZ();
+        try {
+            int px = mc.player.getBlockX();
+            int py = mc.player.getBlockY();
+            int pz = mc.player.getBlockZ();
 
-        scan:
-        for (int x = px - hRadius; x <= px + hRadius; x++) {
-            for (int z = pz - hRadius; z <= pz + hRadius; z++) {
-                for (int y = Math.max(mc.level.getMinY(), py - vRadius); y <= py + vRadius; y++) {
-                    if (callbacks.isEmpty() || y > mc.level.getMinY() + mc.level.getHeight() - 1) break scan;
+            scan:
+            for (int x = px - hRadius; x <= px + hRadius; x++) {
+                for (int z = pz - hRadius; z <= pz + hRadius; z++) {
+                    for (int y = Math.max(mc.level.getMinY(), py - vRadius); y <= py + vRadius; y++) {
+                        if (callbacks.isEmpty() || y > mc.level.getMinY() + mc.level.getHeight() - 1) break scan;
 
-                    blockPos.set(x, y, z);
-                    BlockState blockState = mc.level.getBlockState(blockPos);
+                        blockPos.set(x, y, z);
+                        BlockState blockState = mc.level.getBlockState(blockPos);
 
-                    int dx = Math.abs(x - px);
-                    int dy = Math.abs(y - py);
-                    int dz = Math.abs(z - pz);
+                        int dx = Math.abs(x - px);
+                        int dy = Math.abs(y - py);
+                        int dz = Math.abs(z - pz);
 
-                    Iterator<Callback> iterator = callbacks.iterator();
-                    while (iterator.hasNext()) {
-                        Callback callback = iterator.next();
+                        Iterator<Callback> iterator = callbacks.iterator();
+                        while (iterator.hasNext()) {
+                            Callback callback = iterator.next();
 
-                        if (dx <= callback.hRadius && dy <= callback.vRadius && dz <= callback.hRadius) {
-                            disableCurrent = false;
-                            callback.function.accept(blockPos, blockState);
+                            if (dx <= callback.hRadius && dy <= callback.vRadius && dz <= callback.hRadius) {
+                                disableCurrent = false;
+                                callback.function.accept(blockPos, blockState);
 
-                            if (disableCurrent) {
-                                iterator.remove();
-                                callbackPool.free(callback);
+                                if (disableCurrent) {
+                                    iterator.remove();
+                                    callbackPool.free(callback);
+                                }
                             }
                         }
                     }
                 }
             }
+        } finally {
+            hRadius = 0;
+            vRadius = 0;
+
+            callbackPool.freeAll(callbacks);
+            callbacks.clear();
+
+            callbacks.addAll(pendingCallbacks);
+            pendingCallbacks.clear();
+            hRadius = pendingHRadius;
+            vRadius = pendingVRadius;
+            pendingHRadius = 0;
+            pendingVRadius = 0;
+
+            processing = false;
         }
-
-        hRadius = 0;
-        vRadius = 0;
-
-        callbackPool.freeAll(callbacks);
-        callbacks.clear();
-
-        callbacks.addAll(pendingCallbacks);
-        pendingCallbacks.clear();
-        hRadius = pendingHRadius;
-        vRadius = pendingVRadius;
-        pendingHRadius = 0;
-        pendingVRadius = 0;
-
-        processing = false;
 
         for (Runnable callback : afterCallbacks) callback.run();
         afterCallbacks.clear();
