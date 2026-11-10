@@ -48,10 +48,11 @@ public class BlockIterator {
         int py = mc.player.getBlockY();
         int pz = mc.player.getBlockZ();
 
+        scan:
         for (int x = px - hRadius; x <= px + hRadius; x++) {
             for (int z = pz - hRadius; z <= pz + hRadius; z++) {
                 for (int y = Math.max(mc.level.getMinY(), py - vRadius); y <= py + vRadius; y++) {
-                    if (y > mc.level.getHeight()) break;
+                    if (callbacks.isEmpty() || y > mc.level.getMinY() + mc.level.getHeight() - 1) break scan;
 
                     blockPos.set(x, y, z);
                     BlockState blockState = mc.level.getBlockState(blockPos);
@@ -64,6 +65,8 @@ public class BlockIterator {
                         if (dx <= callback.hRadius && dy <= callback.vRadius && dz <= callback.hRadius) {
                             disableCurrent = false;
                             callback.function.accept(blockPos, blockState);
+
+                            if (disableCurrent) callbackPool.free(callback);
                             return disableCurrent;
                         }
                         return false;
