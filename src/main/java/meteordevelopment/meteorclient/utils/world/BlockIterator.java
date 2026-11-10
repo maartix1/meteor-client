@@ -55,9 +55,11 @@ public class BlockIterator {
         processing = true;
 
         try {
+            scan:
             for (int x = px - scanHRadius; x <= px + scanHRadius; x++) {
                 for (int z = pz - scanHRadius; z <= pz + scanHRadius; z++) {
                     for (int y = Math.max(mc.level.getMinY(), py - scanVRadius); y <= py + scanVRadius; y++) {
+                        if (callbacks.isEmpty()) break scan;
                         if (y > mc.level.getMaxY()) break;
 
                         blockPos.set(x, y, z);
@@ -94,8 +96,17 @@ public class BlockIterator {
             pendingCallbacks.clear();
         }
 
-        for (Runnable callback : afterCallbacks) callback.run();
-        afterCallbacks.clear();
+        try {
+            for (Runnable callback : afterCallbacks) {
+                try {
+                    callback.run();
+                } catch (RuntimeException e) {
+                    MeteorClient.LOG.error("Error while executing a BlockIterator after callback.", e);
+                }
+            }
+        } finally {
+            afterCallbacks.clear();
+        }
     }
 
     public static void register(int horizontalRadius, int verticalRadius, BiConsumer<BlockPos, BlockState> function) {
