@@ -17,7 +17,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
 
 import java.util.Iterator;
-import java.util.Iterator;
 import java.util.List;
 import java.util.function.BiConsumer;
 
@@ -27,17 +26,15 @@ public class BlockIterator {
     private static final Pool<Callback> callbackPool = new Pool<>(Callback::new);
     private static final List<Callback> callbacks = new ReferenceArrayList<>();
     private static final List<Callback> pendingCallbacks = new ReferenceArrayList<>();
-    private static final List<Callback> pendingCallbacks = new ReferenceArrayList<>();
+    private static final List<Callback> completedCallbacks = new ReferenceArrayList<>();
 
     private static final List<Runnable> afterCallbacks = new ReferenceArrayList<>();
 
     private static final BlockPos.MutableBlockPos blockPos = new BlockPos.MutableBlockPos();
     private static int hRadius, vRadius;
-    private static int pendingHRadius, pendingVRadius;
 
     private static boolean processing;
     private static boolean disableCurrent;
-    private static boolean processing;
 
     private BlockIterator() {
     }
@@ -80,7 +77,7 @@ public class BlockIterator {
 
                                 if (disableCurrent) {
                                     iterator.remove();
-                                    callbackPool.free(callback);
+                                    completedCallbacks.add(callback);
                                 }
                             }
                         }
@@ -90,7 +87,9 @@ public class BlockIterator {
         } finally {
             processing = false;
             callbackPool.freeAll(callbacks);
+            callbackPool.freeAll(completedCallbacks);
             callbacks.clear();
+            completedCallbacks.clear();
             callbacks.addAll(pendingCallbacks);
             pendingCallbacks.clear();
         }
@@ -106,16 +105,11 @@ public class BlockIterator {
         callback.hRadius = horizontalRadius;
         callback.vRadius = verticalRadius;
 
-        if (processing) {
-            pendingHRadius = Math.max(pendingHRadius, horizontalRadius);
-            pendingVRadius = Math.max(pendingVRadius, verticalRadius);
-            pendingCallbacks.add(callback);
-        } else {
-            hRadius = Math.max(hRadius, horizontalRadius);
-            vRadius = Math.max(vRadius, verticalRadius);
-            if (processing) pendingCallbacks.add(callback);
+        hRadius = Math.max(hRadius, horizontalRadius);
+        vRadius = Math.max(vRadius, verticalRadius);
+
+        if (processing) pendingCallbacks.add(callback);
         else callbacks.add(callback);
-        }
     }
 
     public static void disableCurrent() {
