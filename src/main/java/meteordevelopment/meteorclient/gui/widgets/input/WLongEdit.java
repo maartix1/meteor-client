@@ -54,7 +54,7 @@ public class WLongEdit extends WHorizontalList {
         boolean good;
         boolean validate = true;
 
-        if (c == '-' && !text.contains("-") && (textBox.selectionStart == textBox.selectionEnd ? textBox.cursor == 0 : Math.min(textBox.selectionStart, textBox.selectionEnd) == 0)) {
+        if (c == '-' && !text.contains("-") && Math.min(textBox.selectionStart, textBox.selectionEnd) == 0) {
             good = true;
             validate = false;
         } else {
