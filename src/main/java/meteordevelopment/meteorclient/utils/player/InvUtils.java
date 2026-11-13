@@ -91,6 +91,8 @@ public class InvUtils {
     }
 
     public static FindItemResult findInHotbar(Predicate<ItemStack> isGood) {
+        if (mc.player == null) return new FindItemResult(-1, 0);
+
         if (testInOffHand(isGood)) {
             return new FindItemResult(SlotUtils.OFFHAND, mc.player.getOffhandItem().getCount());
         }
@@ -107,7 +109,7 @@ public class InvUtils {
     }
 
     public static FindItemResult find(Predicate<ItemStack> isGood) {
-        if (mc.player == null) return new FindItemResult(0, 0);
+        if (mc.player == null) return new FindItemResult(-1, 0);
         return find(isGood, 0, mc.player.getInventory().getContainerSize());
     }
 
@@ -129,6 +131,8 @@ public class InvUtils {
     }
 
     public static FindItemResult findFastestTool(BlockState state) {
+        if (mc.player == null) return new FindItemResult(-1, 0);
+
         float bestScore = 1;
         int slot = -1;
 
@@ -149,6 +153,7 @@ public class InvUtils {
     // Interactions
 
     public static boolean swap(int slot, boolean swapBack) {
+        if (mc.player == null || mc.gameMode == null) return false;
         if (slot == SlotUtils.OFFHAND) return true;
         if (slot < 0 || slot > 8) return false;
         if (swapBack && previousSlot == -1) previousSlot = mc.player.getInventory().getSelectedSlot();
@@ -205,6 +210,7 @@ public class InvUtils {
     }
 
     public static void dropHand() {
+        if (mc.player == null || mc.gameMode == null) return;
         if (!mc.player.containerMenu.getCarried().isEmpty())
             mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, AbstractContainerMenu.SLOT_CLICKED_OUTSIDE, 0, ContainerInput.PICKUP, mc.player);
     }
@@ -323,6 +329,15 @@ public class InvUtils {
         // Other
 
         private void run() {
+            if (mc.player == null || mc.gameMode == null) {
+                type = null;
+                two = false;
+                from = -1;
+                to = -1;
+                data = 0;
+                return;
+            }
+
             boolean hadEmptyCursor = mc.player.containerMenu.getCarried().isEmpty();
 
             if (type == ContainerInput.SWAP) {
