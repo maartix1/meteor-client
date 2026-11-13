@@ -39,7 +39,7 @@ public class InvUtils {
     }
 
     public static boolean testInMainHand(Predicate<ItemStack> predicate) {
-        return predicate.test(mc.player.getMainHandItem());
+        return mc.player != null && predicate.test(mc.player.getMainHandItem());
     }
 
     public static boolean testInMainHand(Item... items) {
@@ -47,7 +47,7 @@ public class InvUtils {
     }
 
     public static boolean testInOffHand(Predicate<ItemStack> predicate) {
-        return predicate.test(mc.player.getOffhandItem());
+        return mc.player != null && predicate.test(mc.player.getOffhandItem());
     }
 
     public static boolean testInOffHand(Item... items) {
@@ -63,6 +63,7 @@ public class InvUtils {
     }
 
     public static boolean testInHotbar(Predicate<ItemStack> predicate) {
+        if (mc.player == null) return false;
         if (testInHands(predicate)) return true;
 
         for (int i = SlotUtils.HOTBAR_START; i <= SlotUtils.HOTBAR_END; i++) {
@@ -104,7 +105,7 @@ public class InvUtils {
     }
 
     public static FindItemResult find(Predicate<ItemStack> isGood) {
-        if (mc.player == null) return new FindItemResult(0, 0);
+        if (mc.player == null) return new FindItemResult(-1, 0);
         return find(isGood, 0, mc.player.getInventory().getContainerSize());
     }
 
@@ -126,6 +127,8 @@ public class InvUtils {
     }
 
     public static FindItemResult findFastestTool(BlockState state) {
+        if (mc.player == null) return new FindItemResult(-1, 0);
+
         float bestScore = 1;
         int slot = -1;
 
@@ -147,7 +150,7 @@ public class InvUtils {
 
     public static boolean swap(int slot, boolean swapBack) {
         if (slot == SlotUtils.OFFHAND) return true;
-        if (slot < 0 || slot > 8) return false;
+        if (slot < 0 || slot > 8 || mc.player == null || mc.gameMode == null) return false;
         if (swapBack && previousSlot == -1) previousSlot = mc.player.getInventory().getSelectedSlot();
         else if (!swapBack) previousSlot = -1;
 
@@ -202,6 +205,8 @@ public class InvUtils {
     }
 
     public static void dropHand() {
+        if (mc.player == null || mc.gameMode == null) return;
+
         if (!mc.player.containerMenu.getCarried().isEmpty())
             mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, AbstractContainerMenu.SLOT_CLICKED_OUTSIDE, 0, ContainerInput.PICKUP, mc.player);
     }
@@ -320,6 +325,11 @@ public class InvUtils {
         // Other
 
         private void run() {
+            if (mc.player == null || mc.gameMode == null) {
+                reset();
+                return;
+            }
+
             boolean hadEmptyCursor = mc.player.containerMenu.getCarried().isEmpty();
 
             if (type == ContainerInput.SWAP) {
@@ -327,30 +337,38 @@ public class InvUtils {
                 from = to;
             }
 
-            if (type != null && from != -1 && to != -1) {
-                click(from);
-                if (two) click(to);
-            }
-
             ContainerInput preType = type;
             boolean preTwo = two;
             int preFrom = from;
             int preTo = to;
+            int preData = data;
 
+            reset();
+
+            if (preType != null && preFrom != -1 && preTo != -1) {
+                click(preFrom, preData, preType);
+                if (preTwo) click(preTo, preData, preType);
+            }
+
+            if (!isRecursive && hadEmptyCursor && preType == ContainerInput.PICKUP && preTwo && (preFrom != -1 && preTo != -1) && !mc.player.containerMenu.getCarried().isEmpty()) {
+                isRecursive = true;
+                try {
+                    InvUtils.click().slotId(preFrom);
+                } finally {
+                    isRecursive = false;
+                }
+            }
+        }
+
+        private void reset() {
             type = null;
             two = false;
             from = -1;
             to = -1;
             data = 0;
-
-            if (!isRecursive && hadEmptyCursor && preType == ContainerInput.PICKUP && preTwo && (preFrom != -1 && preTo != -1) && !mc.player.containerMenu.getCarried().isEmpty()) {
-                isRecursive = true;
-                InvUtils.click().slotId(preFrom);
-                isRecursive = false;
-            }
         }
 
-        private void click(int id) {
+        private void click(int id, int data, ContainerInput type) {
             mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, id, data, type, mc.player);
         }
     }
