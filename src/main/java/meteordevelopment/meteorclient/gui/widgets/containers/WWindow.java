@@ -239,7 +239,7 @@ public abstract class WWindow extends WVerticalList {
             animProgress += (expanded ? 1 : -1) * delta * 14;
             animProgress = Mth.clamp(animProgress, 0, 1);
 
-            triangle.rotation = (1 - animProgress) * -90;
+            if (triangle != null) triangle.rotation = (1 - animProgress) * -90;
 
             return super.render(renderer, mouseX, mouseY, delta);
         }
