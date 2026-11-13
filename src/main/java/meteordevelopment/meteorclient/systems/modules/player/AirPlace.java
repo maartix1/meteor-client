@@ -85,7 +85,7 @@ public class AirPlace extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
-        if (mc.player == null || mc.level == null) {
+        if (mc.player == null || mc.level == null || mc.getCameraEntity() == null) {
             hitResult = null;
             return;
         }
