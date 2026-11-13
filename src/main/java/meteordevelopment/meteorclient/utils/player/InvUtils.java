@@ -330,11 +330,7 @@ public class InvUtils {
 
         private void run() {
             if (mc == null || mc.player == null || mc.gameMode == null || mc.player.containerMenu == null) {
-                type = null;
-                two = false;
-                from = -1;
-                to = -1;
-                data = 0;
+                reset();
                 return;
             }
 
@@ -345,30 +341,39 @@ public class InvUtils {
                 from = to;
             }
 
-            if (type != null && from != -1 && to != -1) {
-                click(from);
-                if (two) click(to);
-            }
-
             ContainerInput preType = type;
             boolean preTwo = two;
             int preFrom = from;
             int preTo = to;
+            int preData = data;
 
+            // Reset before executing clicks so an exception cannot leak this action's state.
+            reset();
+
+            if (preType != null && preFrom != -1 && preTo != -1) {
+                click(preFrom, preData, preType);
+                if (preTwo) click(preTo, preData, preType);
+            }
+
+            if (!isRecursive && hadEmptyCursor && preType == ContainerInput.PICKUP && preTwo && preFrom != -1 && preTo != -1 && !mc.player.containerMenu.getCarried().isEmpty()) {
+                isRecursive = true;
+                try {
+                    InvUtils.click().slotId(preFrom);
+                } finally {
+                    isRecursive = false;
+                }
+            }
+        }
+
+        private void reset() {
             type = null;
             two = false;
             from = -1;
             to = -1;
             data = 0;
-
-            if (!isRecursive && hadEmptyCursor && preType == ContainerInput.PICKUP && preTwo && (preFrom != -1 && preTo != -1) && !mc.player.containerMenu.getCarried().isEmpty()) {
-                isRecursive = true;
-                InvUtils.click().slotId(preFrom);
-                isRecursive = false;
-            }
         }
 
-        private void click(int id) {
+        private void click(int id, int data, ContainerInput type) {
             mc.gameMode.handleContainerInput(mc.player.containerMenu.containerId, id, data, type, mc.player);
         }
     }
