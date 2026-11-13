@@ -39,6 +39,7 @@ public class InvUtils {
     }
 
     public static boolean testInMainHand(Predicate<ItemStack> predicate) {
+        if (mc.player == null) return false;
         return predicate.test(mc.player.getMainHandItem());
     }
 
@@ -47,6 +48,7 @@ public class InvUtils {
     }
 
     public static boolean testInOffHand(Predicate<ItemStack> predicate) {
+        if (mc.player == null) return false;
         return predicate.test(mc.player.getOffhandItem());
     }
 
@@ -63,6 +65,7 @@ public class InvUtils {
     }
 
     public static boolean testInHotbar(Predicate<ItemStack> predicate) {
+        if (mc.player == null) return false;
         if (testInHands(predicate)) return true;
 
         for (int i = SlotUtils.HOTBAR_START; i <= SlotUtils.HOTBAR_END; i++) {

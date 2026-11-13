@@ -85,6 +85,11 @@ public class AirPlace extends Module {
 
     @EventHandler
     private void onTick(TickEvent.Pre event) {
+        if (mc.player == null || mc.level == null) {
+            hitResult = null;
+            return;
+        }
+
         if (!InvUtils.testInHands(this::placeable)) return;
         if (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS) return;
 
@@ -94,7 +99,9 @@ public class AirPlace extends Module {
 
     @EventHandler
     private void onInteractItem(InteractItemEvent event) {
-        if (!(hitResult instanceof BlockHitResult bhr) || !placeable(mc.player.getItemInHand(event.hand))) return;
+        if (mc.player == null || mc.level == null
+            || !(hitResult instanceof BlockHitResult bhr)
+            || !placeable(mc.player.getItemInHand(event.hand))) return;
 
         Block toPlace = Blocks.OBSIDIAN;
         Item i = mc.player.getItemInHand(event.hand).getItem();
@@ -112,7 +119,8 @@ public class AirPlace extends Module {
 
     @EventHandler
     private void onRender(Render3DEvent event) {
-        if (!(hitResult instanceof BlockHitResult bhr)
+        if (mc.player == null || mc.level == null
+            || !(hitResult instanceof BlockHitResult bhr)
             || (mc.hitResult != null && mc.hitResult.getType() != HitResult.Type.MISS)
             || !mc.level.getBlockState(bhr.getBlockPos()).canBeReplaced()
             || !InvUtils.testInHands(this::placeable)
@@ -122,10 +130,12 @@ public class AirPlace extends Module {
     }
 
     private boolean placeable(ItemStack stack) {
+        if (stack == null) return false;
+
         Item i = stack.getItem();
         return i instanceof BlockItem
             || i instanceof SpawnEggItem
-            || (i instanceof FireworkRocketItem && !mc.player.isFallFlying())
+            || (i instanceof FireworkRocketItem && mc.player != null && !mc.player.isFallFlying())
             || i instanceof ArmorStandItem;
     }
 }
