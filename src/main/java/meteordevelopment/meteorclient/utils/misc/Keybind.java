@@ -57,7 +57,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
     private final EnumSet<Modifier> modifiers = EnumSet.noneOf(Modifier.class);
 
     private Keybind(InputConstants.Key key, Collection<Modifier> modifiers) {
-        this.key = key;
+        this.key = Objects.requireNonNull(key, "key");
         this.modifiers.addAll(modifiers);
     }
 
@@ -106,7 +106,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
     }
 
     public void set(InputConstants.Key key, Collection<Modifier> modifiers) {
-        this.key = key;
+        this.key = Objects.requireNonNull(key, "key");
         this.modifiers.clear();
         this.modifiers.addAll(modifiers);
     }
@@ -280,7 +280,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
     private void readModifierNames(ListTag modifiersTag) {
         for (int i = 0; i < modifiersTag.size(); i++) {
             try {
-                modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, "")));
+                modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, ""));
             } catch (IllegalArgumentException _) {
             }
         }
