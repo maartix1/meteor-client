@@ -227,14 +227,18 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
 
         tag.putString("key", key.getName());
 
+        // Keep the legacy integer field for older Meteor versions. The current format stores
+        // modifier names separately because NBT cannot store a list and an integer under one key.
+        int legacyModifiers = 0;
         ListTag modifiersTag = new ListTag();
         for (Modifier modifier : modifiers) {
+            legacyModifiers |= modifier.mask;
             modifiersTag.add(StringTag.valueOf(modifier.name()));
         }
-        tag.put("modifiers", modifiersTag);
+        tag.putInt("modifiers", legacyModifiers);
+        tag.put("modifierNames", modifiersTag);
 
-        // Keep the key identity readable by older Meteor versions that still use the legacy format.
-        // Their deserializer expects these fields and otherwise defaults every bind to mouse button 0.
+        // Older versions expect these fields and otherwise default every bind to mouse button 0.
         tag.putBoolean("isKey", isKey());
         tag.putInt("value", key.getValue());
 
@@ -252,12 +256,14 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
             }
 
             modifiers.clear();
-            ListTag modifiersTag = tag.getListOrEmpty("modifiers");
-            for (int i = 0; i < modifiersTag.size(); i++) {
-                try {
-                    modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, "")));
-                } catch (IllegalArgumentException _) {
-                }
+            if (tag.contains("modifierNames")) {
+                readModifierNames(tag.getListOrEmpty("modifierNames"));
+            } else if (tag.get("modifiers") instanceof ListTag modifiersTag) {
+                // Read configs written by the previous 26.3 format.
+                readModifierNames(modifiersTag);
+            } else {
+                // Read the legacy integer bitmask used by 1.21.11 and earlier.
+                modifiers.addAll(Modifier.fromRawValue(tag.getIntOr("modifiers", 0)));
             }
         } else {
             // Legacy format: raw ints (GLFW)
@@ -269,6 +275,15 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
         }
 
         return this;
+    }
+
+    private void readModifierNames(ListTag modifiersTag) {
+        for (int i = 0; i < modifiersTag.size(); i++) {
+            try {
+                modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, "")));
+            } catch (IllegalArgumentException _) {
+            }
+        }
     }
 
     private static InputConstants.Key keyboard(int key) {
