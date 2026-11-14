@@ -233,6 +233,11 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
         }
         tag.put("modifiers", modifiersTag);
 
+        // Keep the key identity readable by older Meteor versions that still use the legacy format.
+        // Their deserializer expects these fields and otherwise defaults every bind to mouse button 0.
+        tag.putBoolean("isKey", isKey());
+        tag.putInt("value", key.getValue());
+
         return tag;
     }
 
