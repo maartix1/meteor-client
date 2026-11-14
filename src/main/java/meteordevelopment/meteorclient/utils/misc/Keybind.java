@@ -280,7 +280,7 @@ public class Keybind implements ISerializable<Keybind>, ICopyable<Keybind> {
     private void readModifierNames(ListTag modifiersTag) {
         for (int i = 0; i < modifiersTag.size(); i++) {
             try {
-                modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, ""));
+                modifiers.add(Modifier.valueOf(modifiersTag.getStringOr(i, "")));
             } catch (IllegalArgumentException _) {
             }
         }
