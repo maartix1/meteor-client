@@ -22,14 +22,18 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 import org.jspecify.annotations.NonNull;
 
 import java.util.Objects;
+import java.util.function.Supplier;
 
 public abstract class Module implements ISerializable<Module>, Comparable<Module> {
     protected final Minecraft mc;
 
     public final Category category;
+    /** Item icon displayed beside this module's name. Defaults to the category icon. */
+    public Supplier<ItemStack> icon;
     public final String name;
     public final String title;
     public final String description;
@@ -56,6 +60,7 @@ public abstract class Module implements ISerializable<Module>, Comparable<Module
 
         this.mc = Minecraft.getInstance();
         this.category = category;
+        this.icon = category.icon;
         this.name = name;
         this.title = Utils.nameToTitle(name);
         this.description = description;

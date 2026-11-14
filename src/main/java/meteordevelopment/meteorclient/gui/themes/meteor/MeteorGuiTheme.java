@@ -74,6 +74,13 @@ public class MeteorGuiTheme extends GuiTheme {
         .build()
     );
 
+    public final Setting<Boolean> moduleIcons = sgGeneral.add(new BoolSetting.Builder()
+        .name("module-icons")
+        .description("Adds item icons next to module names.")
+        .defaultValue(false)
+        .build()
+    );
+
     public final Setting<Boolean> modulesHelpText = sgGeneral.add(new BoolSetting.Builder()
         .name("modules-help-text")
         .description("Toggle help text in the modules screen.")
@@ -385,6 +392,11 @@ public class MeteorGuiTheme extends GuiTheme {
     @Override
     public boolean categoryIcons() {
         return categoryIcons.get();
+    }
+
+    @Override
+    public boolean moduleIcons() {
+        return moduleIcons.get();
     }
 
     @Override

@@ -52,8 +52,11 @@ public class WMeteorModule extends WPressable implements MeteorWidget {
 
         if (titleWidth == 0) titleWidth = theme.textWidth(title);
 
-        width = pad + titleWidth + pad;
-        height = pad + theme.textHeight() + pad;
+        double iconSize = theme.moduleIcons() && !module.icon.get().isEmpty() ? theme.scale(16) : 0;
+        double iconGap = iconSize > 0 ? theme.scale(4) : 0;
+
+        width = pad + iconSize + iconGap + titleWidth + pad;
+        height = pad + Math.max(theme.textHeight(), iconSize) + pad;
     }
 
     @Override
@@ -80,15 +83,28 @@ public class WMeteorModule extends WPressable implements MeteorWidget {
             renderer.quad(x, y + height * (1 - animationProgress2), theme.scale(2), height * animationProgress2, theme.accentColor.get());
         }
 
+        boolean renderIcon = theme.moduleIcons() && !module.icon.get().isEmpty();
+        double iconSize = renderIcon ? theme.scale(16) : 0;
+        double iconGap = renderIcon ? theme.scale(4) : 0;
+        double contentWidth = iconSize + iconGap + titleWidth;
+
         double x = this.x + pad;
         double w = width - pad * 2;
 
         if (theme.moduleAlignment.get() == AlignmentX.Center) {
-            x += w / 2 - titleWidth / 2;
+            x += w / 2 - contentWidth / 2;
         } else if (theme.moduleAlignment.get() == AlignmentX.Right) {
-            x += w - titleWidth;
+            x += w - contentWidth;
         }
 
-        renderer.text(title, x, y + pad, theme.textColor.get(), false);
+        if (renderIcon) {
+            double iconX = x;
+            double iconY = this.y + (height - iconSize) / 2;
+            renderer.post(() -> renderer.item(module.icon.get(), (int) iconX, (int) iconY, (float) theme.scale(1), true));
+            x += iconSize + iconGap;
+        }
+
+        double textY = this.y + (height - theme.textHeight()) / 2;
+        renderer.text(title, x, textY, theme.textColor.get(), false);
     }
 }

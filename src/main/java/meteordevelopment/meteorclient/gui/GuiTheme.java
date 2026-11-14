@@ -315,6 +315,10 @@ public abstract class GuiTheme implements ISerializable<GuiTheme> {
 
     public abstract boolean categoryIcons();
 
+    public boolean moduleIcons() {
+        return false;
+    }
+
     public abstract boolean modulesHelpText();
 
     public abstract boolean hideHUD();
