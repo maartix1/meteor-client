@@ -33,13 +33,13 @@ public class Renderer3D {
 
     public void render(PoseStack matrices) {
         MeshRenderer.begin()
-            .attachments(Minecraft.getInstance().gameRenderer.mainRenderTarget())
+            .attachments(Minecraft.getInstance().getMainRenderTarget())
             .pipeline(linesPipeline)
             .mesh(lines, matrices)
             .end();
 
         MeshRenderer.begin()
-            .attachments(Minecraft.getInstance().gameRenderer.mainRenderTarget())
+            .attachments(Minecraft.getInstance().getMainRenderTarget())
             .pipeline(trianglesPipeline)
             .mesh(triangles, matrices)
             .end();
