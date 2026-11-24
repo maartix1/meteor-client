@@ -64,13 +64,13 @@ public class Renderer2D {
         if (triangles.isBuilding()) triangles.end();
 
         MeshRenderer.begin()
-            .attachments(Minecraft.getInstance().gameRenderer.mainRenderTarget())
+            .attachments(Minecraft.getInstance().getMainRenderTarget())
             .pipeline(MeteorRenderPipelines.UI_COLORED_LINES)
             .mesh(lines)
             .end();
 
         MeshRenderer.begin()
-            .attachments(Minecraft.getInstance().gameRenderer.mainRenderTarget())
+            .attachments(Minecraft.getInstance().getMainRenderTarget())
             .pipeline(textured ? MeteorRenderPipelines.UI_TEXTURED : MeteorRenderPipelines.UI_COLORED)
             .mesh(triangles)
             .sampler(samplerName, samplerView, sampler)
