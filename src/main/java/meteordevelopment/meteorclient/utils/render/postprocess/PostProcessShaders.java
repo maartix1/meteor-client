@@ -1,7 +1,7 @@
 package meteordevelopment.meteorclient.utils.render.postprocess;
 
 import meteordevelopment.meteorclient.MeteorClient;
-import meteordevelopment.meteorclient.events.render.Render2DEvent;
+import meteordevelopment.meteorclient.events.render.RenderAfterWorldEvent;
 import meteordevelopment.meteorclient.utils.PreInit;
 import meteordevelopment.orbit.EventHandler;
 
@@ -35,7 +35,8 @@ public class PostProcessShaders {
     }
 
     @EventHandler
-    private static void onRender(Render2DEvent event) {
+    private static void onRenderAfterWorld(RenderAfterWorldEvent event) {
+        // Composite before HUD rendering can switch the main render target.
         CHAMS.render();
         ENTITY_OUTLINE.render();
     }
