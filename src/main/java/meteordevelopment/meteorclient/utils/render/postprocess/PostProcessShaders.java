@@ -16,7 +16,6 @@ public class PostProcessShaders {
         CHAMS = new ChamsShader();
         ENTITY_OUTLINE = new EntityOutlineShader();
         STORAGE_OUTLINE = new StorageOutlineShader();
-
     }
 
     public static void beginRender() {
