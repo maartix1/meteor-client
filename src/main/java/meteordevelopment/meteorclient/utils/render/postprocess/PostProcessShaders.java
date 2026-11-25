@@ -36,7 +36,6 @@ public class PostProcessShaders {
 
     @EventHandler
     private static void onRenderAfterWorld(RenderAfterWorldEvent event) {
-        // Composite before HUD rendering can switch the main render target.
         CHAMS.render();
         ENTITY_OUTLINE.render();
     }
