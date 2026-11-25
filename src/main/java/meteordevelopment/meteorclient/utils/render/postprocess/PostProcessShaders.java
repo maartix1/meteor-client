@@ -4,6 +4,7 @@ import meteordevelopment.meteorclient.MeteorClient;
 import meteordevelopment.meteorclient.events.render.RenderAfterWorldEvent;
 import meteordevelopment.meteorclient.utils.PreInit;
 import meteordevelopment.orbit.EventHandler;
+import meteordevelopment.orbit.EventPriority;
 
 import static meteordevelopment.meteorclient.MeteorClient.mc;
 
@@ -34,7 +35,7 @@ public class PostProcessShaders {
         ENTITY_OUTLINE.submitVertices();
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.LOWEST)
     private static void onRenderAfterWorld(RenderAfterWorldEvent event) {
         CHAMS.render();
         ENTITY_OUTLINE.render();
