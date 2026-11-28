@@ -378,21 +378,14 @@ public class NoFall extends Module {
                 return;
             }
 
+            // Entity interaction packets do not need a rotation callback. Mount as soon as the server-spawned boat appears.
             for (Entity entity : mc.level.entitiesForRendering()) {
                 if (!(entity instanceof AbstractBoat boat)) continue;
-                if (boat.position().distanceToSqr(boatTarget) > 16) continue;
-                if (mc.player.position().distanceToSqr(boat.position()) > 36) continue;
+                if (boat.position().distanceToSqr(boatTarget) > 25) continue;
+                if (mc.player.position().distanceToSqr(boat.position()) > 25) continue;
 
-                Runnable mount = () -> {
-                    if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Boat
-                        || !Utils.canUpdate() || mc.player.isPassenger()) return;
-
-                    EntityHitResult hit = new EntityHitResult(boat, boat.getBoundingBox().getCenter());
-                    mc.gameMode.interact(mc.player, boat, hit, InteractionHand.MAIN_HAND);
-                };
-
-                if (rotate.get()) Rotations.rotate(Rotations.getYaw(boat), Rotations.getPitch(boat), Integer.MAX_VALUE, mount);
-                else mount.run();
+                EntityHitResult hit = new EntityHitResult(boat, boat.getBoundingBox().getCenter());
+                mc.gameMode.interact(mc.player, boat, hit, InteractionHand.MAIN_HAND);
                 return;
             }
             return;
@@ -403,33 +396,28 @@ public class NoFall extends Module {
             return;
         }
 
-        if (mc.player.getDeltaMovement().y >= 0 || mc.player.fallDistance <= 3 || mc.player.isInWater()) return;
+        if (mc.player.getDeltaMovement().y >= 0 || mc.player.isInWater()) return;
 
         FindItemResult boatItem = InvUtils.findInHotbar(stack -> stack.is(ItemTags.BOATS));
         if (!boatItem.found()) return;
 
-        BlockHitResult hit = findLandingSurface(mc.player.getYRot());
-        if (hit == null || !isWithinPlaceReach(hit.getLocation())) return;
+        BlockHitResult landing = findLandingSurface(mc.player.getYRot());
+        if (landing == null || !isWithinBoatReach(landing.getLocation())) return;
 
-        Runnable place = () -> {
-            if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Boat
-                || boatTarget != null || !Utils.canUpdate()) return;
-            if (mc.player.onGround() || mc.player.getDeltaMovement().y >= 0) return;
+        InteractionResult result = useBoatItem(boatItem, landing.getLocation());
+        if (result.consumesAction()) {
+            boatTarget = landing.getLocation();
+            boatTimer = 0;
+            boatCooldown = 0;
+        } else {
+            // Retry on the next tick: PASS often means the view ray has not reached the predicted surface yet.
+            boatCooldown = 1;
+        }
+    }
 
-            BlockHitResult currentHit = findLandingSurface(mc.player.getYRot());
-            if (currentHit == null || !currentHit.getBlockPos().equals(hit.getBlockPos())
-                || !isWithinPlaceReach(currentHit.getLocation())) return;
-
-            boatCooldown = 3;
-            InteractionResult result = useBoatItem(boatItem, currentHit.getLocation());
-            if (result.consumesAction()) {
-                boatTarget = currentHit.getLocation();
-                boatTimer = 0;
-            }
-        };
-
-        if (rotate.get()) Rotations.rotate(Rotations.getYaw(hit.getLocation()), Rotations.getPitch(hit.getLocation()), Integer.MAX_VALUE, true, place);
-        else place.run();
+    private boolean isWithinBoatReach(Vec3 pos) {
+        // BoatItem#getPlayerPOVHitResult uses a five-block ray in Minecraft 26.3.
+        return mc.player.getEyePosition().distanceToSqr(pos) <= 25.0;
     }
 
     private InteractionResult useBoatItem(FindItemResult found, Vec3 aim) {
@@ -473,7 +461,7 @@ public class NoFall extends Module {
         }
 
         if (mc.player.isPassenger() || mc.player.isInWater()
-            || mc.player.getDeltaMovement().y >= 0 || mc.player.fallDistance <= 3) return;
+            || mc.player.getDeltaMovement().y >= 0 || mc.player.fallDistance < 0.25) return;
 
         FindItemResult ladderItem = InvUtils.findInHotbar(Items.LADDER);
         if (!ladderItem.found()) return;
@@ -485,14 +473,18 @@ public class NoFall extends Module {
             Runnable place = () -> {
                 if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Ladder || !Utils.canUpdate()) return;
                 if (!BlockUtils.canPlaceBlock(target.targetPos(), false, Blocks.LADDER)) return;
+                if (!mc.level.getBlockState(target.supportPos()).isFaceSturdy(mc.level, target.supportPos(), target.face())) return;
 
                 BlockHitResult hit = new BlockHitResult(target.hitPos(), target.face(), target.supportPos(), false);
                 InteractionResult result = useClutchItem(ladderItem, hit, stack -> stack.is(Items.LADDER));
-                ladderCooldown = result.consumesAction() ? 5 : 3;
+                ladderCooldown = result.consumesAction() ? 3 : 1;
             };
 
-            if (rotate.get()) Rotations.rotate(Rotations.getYaw(target.hitPos()), Rotations.getPitch(target.hitPos()), Integer.MAX_VALUE, true, place);
-            else place.run();
+            if (rotate.get()) {
+                Rotations.rotate(Rotations.getYaw(target.hitPos()), Rotations.getPitch(target.hitPos()), Integer.MAX_VALUE, true, place);
+            } else {
+                place.run();
+            }
         } else {
             startBlockAndLadderClutch();
         }
@@ -500,26 +492,49 @@ public class NoFall extends Module {
 
     private LadderTarget findDirectLadderTarget() {
         BlockPos origin = mc.player.blockPosition();
+        AABB playerReach = mc.player.getBoundingBox().inflate(0.75, 0.4, 0.75);
 
-        for (int y = 0; y >= -2; y--) {
-            BlockPos ladderPos = origin.offset(0, y, 0);
-            if (!BlockUtils.canPlaceBlock(ladderPos, false, Blocks.LADDER)) continue;
+        LadderTarget best = null;
+        double bestDistance = Double.MAX_VALUE;
 
-            for (Direction direction : Direction.values()) {
-                if (direction.getAxis() == Direction.Axis.Y) continue;
+        // Search the player's current column and adjacent columns. A ladder must be close enough to catch.
+        for (int y = origin.getY() + 1; y >= origin.getY() - 2; y--) {
+            for (int x = origin.getX() - 1; x <= origin.getX() + 1; x++) {
+                for (int z = origin.getZ() - 1; z <= origin.getZ() + 1; z++) {
+                    BlockPos ladderPos = new BlockPos(x, y, z);
+                    AABB ladderBox = new AABB(x, y, z, x + 1, y + 1, z + 1);
+                    if (!playerReach.intersects(ladderBox)) continue;
+                    if (!BlockUtils.canPlaceBlock(ladderPos, false, Blocks.LADDER)) continue;
 
-                BlockPos supportPos = ladderPos.relative(direction);
-                Direction face = direction.getOpposite();
-                if (!mc.level.getBlockState(supportPos).isFaceSturdy(mc.level, supportPos, face)) continue;
+                    for (Direction direction : Direction.values()) {
+                        if (direction.getAxis() == Direction.Axis.Y) continue;
 
-                Vec3 hitPos = faceCenter(supportPos, face);
-                if (!isWithinPlaceReach(hitPos)) continue;
+                        BlockPos supportPos = ladderPos.relative(direction);
+                        Direction face = direction.getOpposite();
+                        if (!mc.level.getBlockState(supportPos).isFaceSturdy(mc.level, supportPos, face)) continue;
 
-                return new LadderTarget(ladderPos, supportPos, face, hitPos);
+                        Vec3 hitPos = faceCenter(supportPos, face);
+                        if (!isWithinPlaceReach(hitPos)) continue;
+
+                        // Do not pick a face hidden behind another block.
+                        Vec3 rayEnd = hitPos.subtract(face.getStepX() * 0.01, face.getStepY() * 0.01, face.getStepZ() * 0.01);
+                        BlockHitResult sight = mc.level.clip(new ClipContext(mc.player.getEyePosition(), rayEnd,
+                            ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
+                        if (sight.getType() != HitResult.Type.BLOCK
+                            || !sight.getBlockPos().equals(supportPos)
+                            || sight.getDirection() != face) continue;
+
+                        double distance = mc.player.position().distanceToSqr(Vec3.atCenterOf(ladderPos));
+                        if (distance < bestDistance) {
+                            bestDistance = distance;
+                            best = new LadderTarget(ladderPos, supportPos, face, hitPos);
+                        }
+                    }
+                }
             }
         }
 
-        return null;
+        return best;
     }
 
     private void startBlockAndLadderClutch() {
@@ -564,8 +579,9 @@ public class NoFall extends Module {
                     ladderTargetPos = ladderPos;
                     ladderSupportFace = ladderFace;
                     ladderTimer = 0;
+                    placeLadderOnPendingSupport();
                 } else {
-                    ladderCooldown = 3;
+                    ladderCooldown = 1;
                 }
             };
 
@@ -626,7 +642,7 @@ public class NoFall extends Module {
         try {
             if (hand == InteractionHand.MAIN_HAND && !InvUtils.swap(found.slot(), false)) return InteractionResult.FAIL;
             if (!predicate.test(mc.player.getItemInHand(hand))) return InteractionResult.FAIL;
-            return mc.gameMode.useItemOn(mc.player, hand, hit);
+            return BlockUtils.interact(hit, hand, true);
         } finally {
             if (hand == InteractionHand.MAIN_HAND) InvUtils.swap(previousSlot, false);
         }
@@ -680,7 +696,9 @@ public class NoFall extends Module {
             input.z * Math.cos(yaw) + input.x * Math.sin(yaw));
 
         // Simulate only the nearby landing window, without changing the player's movement.
-        for (int tick = 0; tick < 8; tick++) {
+        int predictionTicks = mode.get() == Mode.Place
+            && (placedItem.get() == PlacedItem.Boat || placedItem.get() == PlacedItem.BlockAndLadder) ? 20 : 8;
+        for (int tick = 0; tick < predictionTicks; tick++) {
             velocity = velocity.add(acceleration);
             Vec3 movement = Entity.collideBoundingBox(mc.player, velocity, box, mc.level,
                 mc.level.getEntityCollisions(mc.player, box.expandTowards(velocity)));
