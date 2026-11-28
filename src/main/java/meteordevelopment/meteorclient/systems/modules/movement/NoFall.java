@@ -112,7 +112,9 @@ public class NoFall extends Module {
         .name("anchor")
         .description("Centers the player and reduces movement when using bucket or air place mode.")
         .defaultValue(true)
-        .visible(() -> mode.get() == Mode.Place || mode.get() == Mode.AirPlace)
+        .visible(() -> mode.get() == Mode.AirPlace || mode.get() == Mode.Place
+            && placedItem.get() != PlacedItem.Boat && placedItem.get() != PlacedItem.Ladder
+            && placedItem.get() != PlacedItem.BlockAndLadder)
         .build()
     );
 
