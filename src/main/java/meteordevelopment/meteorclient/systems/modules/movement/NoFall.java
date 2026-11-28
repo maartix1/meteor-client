@@ -101,7 +101,7 @@ public class NoFall extends Module {
 
     private final Setting<Boolean> rotate = sgGeneral.add(new BoolSetting.Builder()
         .name("rotate")
-        .description("Rotates toward placement and bucket pickup targets.")
+        .description("Rotates toward placement, clutch, and bucket pickup targets.")
         .defaultValue(true)
         .visible(() -> mode.get() == Mode.Place || mode.get() == Mode.AirPlace || mode.get() == Mode.Boat || mode.get() == Mode.Ladder)
         .build()
@@ -150,6 +150,7 @@ public class NoFall extends Module {
     private boolean prePathManagerNoFall;
     private Vec3 boatTarget;
     private int boatTimer;
+    private int boatCooldown;
     private BlockPos ladderSupportPos;
     private BlockPos ladderTargetPos;
     private Direction ladderSupportFace;
@@ -199,6 +200,7 @@ public class NoFall extends Module {
         pendingBucketUse = null;
         boatTarget = null;
         boatTimer = 0;
+        boatCooldown = 0;
         clearLadderPlacement();
         ladderCooldown = 0;
     }
@@ -367,6 +369,7 @@ public class NoFall extends Module {
         if (mc.player.isPassenger()) {
             boatTarget = null;
             boatTimer = 0;
+            boatCooldown = 0;
             return;
         }
 
@@ -396,6 +399,11 @@ public class NoFall extends Module {
             return;
         }
 
+        if (boatCooldown > 0) {
+            boatCooldown--;
+            return;
+        }
+
         if (mc.player.getDeltaMovement().y >= 0 || mc.player.fallDistance <= 3 || mc.player.isInWater()) return;
 
         FindItemResult boatItem = InvUtils.findInHotbar(stack -> stack.is(ItemTags.BOATS));
@@ -412,6 +420,7 @@ public class NoFall extends Module {
             if (currentHit == null || !currentHit.getBlockPos().equals(hit.getBlockPos())
                 || !isWithinPlaceReach(currentHit.getLocation())) return;
 
+            boatCooldown = 3;
             InteractionResult result = useClutchItem(boatItem, currentHit, stack -> stack.is(ItemTags.BOATS));
             if (result.consumesAction()) {
                 boatTarget = currentHit.getLocation();
@@ -453,7 +462,7 @@ public class NoFall extends Module {
 
                 BlockHitResult hit = new BlockHitResult(target.hitPos(), target.face(), target.supportPos(), false);
                 InteractionResult result = useClutchItem(ladderItem, hit, stack -> stack.is(Items.LADDER));
-                if (result.consumesAction()) ladderCooldown = 5;
+                ladderCooldown = result.consumesAction() ? 5 : 3;
             };
 
             if (rotate.get()) Rotations.rotate(Rotations.getYaw(target.hitPos()), Rotations.getPitch(target.hitPos()), Integer.MAX_VALUE, true, place);
@@ -565,10 +574,8 @@ public class NoFall extends Module {
             if (!isActive() || mode.get() != Mode.Ladder || ladderSupportPos == null || !Utils.canUpdate()) return;
             BlockHitResult hit = new BlockHitResult(hitPos, ladderSupportFace, ladderSupportPos, false);
             InteractionResult result = useClutchItem(ladderItem, hit, stack -> stack.is(Items.LADDER));
-            if (result.consumesAction()) {
-                clearLadderPlacement();
-                ladderCooldown = 5;
-            }
+            if (result.consumesAction()) clearLadderPlacement();
+            ladderCooldown = result.consumesAction() ? 5 : 3;
         };
 
         if (rotate.get()) Rotations.rotate(Rotations.getYaw(hitPos), Rotations.getPitch(hitPos), Integer.MAX_VALUE, true, place);
