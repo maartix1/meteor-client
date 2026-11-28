@@ -85,9 +85,10 @@ public class NoFall extends Module {
 
     private final Setting<PlacedItem> placedItem = sgGeneral.add(new EnumSetting.Builder<PlacedItem>()
         .name("placed-item")
-        .description("Which block to place.")
+        .description("Which item to use or block to place.")
         .defaultValue(PlacedItem.Bucket)
         .visible(() -> mode.get() == Mode.Place)
+        .onChanged(value -> clearPlacement())
         .build()
     );
 
@@ -103,15 +104,7 @@ public class NoFall extends Module {
         .name("rotate")
         .description("Rotates toward placement, clutch, and bucket pickup targets.")
         .defaultValue(true)
-        .visible(() -> mode.get() == Mode.Place || mode.get() == Mode.AirPlace || mode.get() == Mode.Boat || mode.get() == Mode.Ladder)
-        .build()
-    );
-
-    private final Setting<LadderPlacement> ladderPlacement = sgGeneral.add(new EnumSetting.Builder<LadderPlacement>()
-        .name("ladder-placement")
-        .description("How Ladder clutch creates a surface to attach to.")
-        .defaultValue(LadderPlacement.Direct)
-        .visible(() -> mode.get() == Mode.Ladder)
+        .visible(() -> mode.get() == Mode.Place || mode.get() == Mode.AirPlace)
         .build()
     );
 
@@ -300,6 +293,15 @@ public class NoFall extends Module {
         if (mc.player.getAbilities().instabuild || mc.player.isSpectator()) return;
         if (pauseOnMace.get() && mc.player.getMainHandItem().getItem() instanceof MaceItem) return;
 
+        if (placedItem.get() == PlacedItem.Boat) {
+            tickBoatClutch();
+            return;
+        }
+        if (placedItem.get() == PlacedItem.Ladder || placedItem.get() == PlacedItem.BlockAndLadder) {
+            tickLadderClutch();
+            return;
+        }
+
         if (targetPos != null) {
             timer++;
             boolean settled = mc.player.fallDistance == 0 && (mc.player.onGround()
@@ -354,13 +356,6 @@ public class NoFall extends Module {
     }
 
 
-    @EventHandler
-    private void onClutchTick(TickEvent.Pre event) {
-        if (!Utils.canUpdate()) return;
-
-        if (mode.get() == Mode.Boat) tickBoatClutch();
-        else if (mode.get() == Mode.Ladder) tickLadderClutch();
-    }
 
     private void tickBoatClutch() {
         if (mc.player.getAbilities().instabuild || mc.player.isSpectator()) return;
@@ -377,24 +372,26 @@ public class NoFall extends Module {
             boatTimer++;
             if (boatTimer > recoveryTimeout(PlayerUtils.getPing())) {
                 boatTarget = null;
+                boatTimer = 0;
                 return;
             }
 
-            if (boatTimer % 2 == 0) {
-                for (Entity entity : mc.level.entitiesForRendering()) {
-                    if (!(entity instanceof AbstractBoat boat)) continue;
-                    if (boat.position().distanceToSqr(boatTarget) > 16 || !PlayerUtils.isWithin(boat, 4.5)) continue;
+            for (Entity entity : mc.level.entitiesForRendering()) {
+                if (!(entity instanceof AbstractBoat boat)) continue;
+                if (boat.position().distanceToSqr(boatTarget) > 16) continue;
+                if (mc.player.position().distanceToSqr(boat.position()) > 36) continue;
 
-                    Runnable mount = () -> {
-                        if (!isActive() || mode.get() != Mode.Boat || !Utils.canUpdate() || mc.player.isPassenger()) return;
-                        EntityHitResult hit = new EntityHitResult(boat, boat.getBoundingBox().getCenter());
-                        mc.gameMode.interact(mc.player, boat, hit, InteractionHand.MAIN_HAND);
-                    };
+                Runnable mount = () -> {
+                    if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Boat
+                        || !Utils.canUpdate() || mc.player.isPassenger()) return;
 
-                    if (rotate.get()) Rotations.rotate(Rotations.getYaw(boat), Rotations.getPitch(boat), Integer.MAX_VALUE, mount);
-                    else mount.run();
-                    break;
-                }
+                    EntityHitResult hit = new EntityHitResult(boat, boat.getBoundingBox().getCenter());
+                    mc.gameMode.interact(mc.player, boat, hit, InteractionHand.MAIN_HAND);
+                };
+
+                if (rotate.get()) Rotations.rotate(Rotations.getYaw(boat), Rotations.getPitch(boat), Integer.MAX_VALUE, mount);
+                else mount.run();
+                return;
             }
             return;
         }
@@ -413,7 +410,8 @@ public class NoFall extends Module {
         if (hit == null || !isWithinPlaceReach(hit.getLocation())) return;
 
         Runnable place = () -> {
-            if (!isActive() || mode.get() != Mode.Boat || boatTarget != null || !Utils.canUpdate()) return;
+            if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Boat
+                || boatTarget != null || !Utils.canUpdate()) return;
             if (mc.player.onGround() || mc.player.getDeltaMovement().y >= 0) return;
 
             BlockHitResult currentHit = findLandingSurface(mc.player.getYRot());
@@ -421,7 +419,7 @@ public class NoFall extends Module {
                 || !isWithinPlaceReach(currentHit.getLocation())) return;
 
             boatCooldown = 3;
-            InteractionResult result = useClutchItem(boatItem, currentHit, stack -> stack.is(ItemTags.BOATS));
+            InteractionResult result = useBoatItem(boatItem, currentHit.getLocation());
             if (result.consumesAction()) {
                 boatTarget = currentHit.getLocation();
                 boatTimer = 0;
@@ -430,6 +428,32 @@ public class NoFall extends Module {
 
         if (rotate.get()) Rotations.rotate(Rotations.getYaw(hit.getLocation()), Rotations.getPitch(hit.getLocation()), Integer.MAX_VALUE, true, place);
         else place.run();
+    }
+
+    private InteractionResult useBoatItem(FindItemResult found, Vec3 aim) {
+        if (!found.found()) return InteractionResult.FAIL;
+
+        InteractionHand hand = found.isOffhand() ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
+        float yaw = mc.player.getYRot();
+        float pitch = mc.player.getXRot();
+        int slot = mc.player.getInventory().getSelectedSlot();
+
+        try {
+            if (hand == InteractionHand.MAIN_HAND && !InvUtils.swap(found.slot(), false)) return InteractionResult.FAIL;
+            if (!mc.player.getItemInHand(hand).is(ItemTags.BOATS)) return InteractionResult.FAIL;
+
+            // Boat items use their own raycast in Item#use; aim at the predicted landing point.
+            mc.player.setYRot((float) Rotations.getYaw(aim));
+            mc.player.setXRot((float) Rotations.getPitch(aim));
+            return mc.gameMode.useItem(mc.player, hand);
+        } finally {
+            if (hand == InteractionHand.MAIN_HAND) {
+                mc.player.getInventory().setSelectedSlot(slot);
+                ((IMultiPlayerGameMode) mc.gameMode).meteor$syncSelected();
+            }
+            mc.player.setYRot(yaw);
+            mc.player.setXRot(pitch);
+        }
     }
 
     private void tickLadderClutch() {
@@ -452,12 +476,12 @@ public class NoFall extends Module {
         FindItemResult ladderItem = InvUtils.findInHotbar(Items.LADDER);
         if (!ladderItem.found()) return;
 
-        if (ladderPlacement.get() == LadderPlacement.Direct) {
+        if (placedItem.get() == PlacedItem.Ladder) {
             LadderTarget target = findDirectLadderTarget();
             if (target == null) return;
 
             Runnable place = () -> {
-                if (!isActive() || mode.get() != Mode.Ladder || !Utils.canUpdate()) return;
+                if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.Ladder || !Utils.canUpdate()) return;
                 if (!BlockUtils.canPlaceBlock(target.targetPos(), false, Blocks.LADDER)) return;
 
                 BlockHitResult hit = new BlockHitResult(target.hitPos(), target.face(), target.supportPos(), false);
@@ -525,14 +549,21 @@ public class NoFall extends Module {
 
             Direction ladderFace = direction.getOpposite();
             Runnable placeSupport = () -> {
-                if (!isActive() || mode.get() != Mode.Ladder || ladderSupportPos != null || !Utils.canUpdate()) return;
+                if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.BlockAndLadder
+                    || ladderSupportPos != null || !Utils.canUpdate()) return;
                 if (!BlockUtils.canPlaceBlock(supportPos, false, supportBlockItem.getBlock())) return;
 
-                if (BlockUtils.place(supportPos, supportItem, false, 10, true, false)) {
+                BlockHitResult supportHit = new BlockHitResult(blockHit, Direction.UP, floorPos, false);
+                InteractionResult result = useClutchItem(supportItem, supportHit,
+                    stack -> stack.getItem() instanceof BlockItem blockItem && blockItem.getBlock() == supportBlockItem.getBlock());
+
+                if (result.consumesAction()) {
                     ladderSupportPos = supportPos;
                     ladderTargetPos = ladderPos;
                     ladderSupportFace = ladderFace;
                     ladderTimer = 0;
+                } else {
+                    ladderCooldown = 3;
                 }
             };
 
@@ -571,7 +602,9 @@ public class NoFall extends Module {
         if (!isWithinPlaceReach(hitPos)) return;
 
         Runnable place = () -> {
-            if (!isActive() || mode.get() != Mode.Ladder || ladderSupportPos == null || !Utils.canUpdate()) return;
+            if (!isActive() || mode.get() != Mode.Place || placedItem.get() != PlacedItem.BlockAndLadder
+                || ladderSupportPos == null || !Utils.canUpdate()) return;
+
             BlockHitResult hit = new BlockHitResult(hitPos, ladderSupportFace, ladderSupportPos, false);
             InteractionResult result = useClutchItem(ladderItem, hit, stack -> stack.is(Items.LADDER));
             if (result.consumesAction()) clearLadderPlacement();
@@ -603,7 +636,6 @@ public class NoFall extends Module {
 
     private record LadderTarget(BlockPos targetPos, BlockPos supportPos, Direction face, Vec3 hitPos) {
     }
-
     @EventHandler
     private void onSendMovementPackets(SendMovementPacketsEvent.Post event) {
         Runnable use = pendingBucketUse;
@@ -756,14 +788,7 @@ public class NoFall extends Module {
         Packet,
         NoGround,
         AirPlace,
-        Place,
-        Boat,
-        Ladder
-    }
-
-    public enum LadderPlacement {
-        Direct,
-        BlockAndLadder
+        Place
     }
 
     public enum PlacedItem {
@@ -771,7 +796,10 @@ public class NoFall extends Module {
         PowderSnow(Items.POWDER_SNOW_BUCKET),
         HayBale(Items.HAY_BLOCK),
         Cobweb(Items.COBWEB),
-        SlimeBlock(Items.SLIME_BLOCK);
+        SlimeBlock(Items.SLIME_BLOCK),
+        Boat(Items.OAK_BOAT),
+        Ladder(Items.LADDER),
+        BlockAndLadder(Items.LADDER);
 
         private final Item item;
 
