@@ -350,21 +350,44 @@ public class NoFall extends Module {
 
         if (boatTarget != null) {
             boatTimer++;
-            if (boatTimer > recoveryTimeout(PlayerUtils.getPing())) {
+            if (boatTimer > Math.max(40, recoveryTimeout(PlayerUtils.getPing()))) {
                 boatTarget = null;
                 boatTimer = 0;
                 return;
             }
 
-            // Entity interaction packets do not need a rotation callback. Mount as soon as the server-spawned boat appears.
-            for (Entity entity : mc.level.entitiesForRendering()) {
-                if (!(entity instanceof AbstractBoat boat)) continue;
-                if (boat.position().distanceToSqr(boatTarget) > 25) continue;
-                if (mc.player.position().distanceToSqr(boat.position()) > 25) continue;
+            // Query loaded entities around the placement point. entitiesForRendering() can omit
+            // an entity which is loaded but is not currently in the render list.
+            AABB searchBox = new AABB(
+                boatTarget.x - 6, boatTarget.y - 4, boatTarget.z - 6,
+                boatTarget.x + 6, boatTarget.y + 4, boatTarget.z + 6
+            );
 
-                EntityHitResult hit = new EntityHitResult(boat, boat.getBoundingBox().getCenter());
-                mc.gameMode.interact(mc.player, boat, hit, InteractionHand.MAIN_HAND);
-                return;
+            AbstractBoat closestBoat = null;
+            double closestDistance = Double.MAX_VALUE;
+
+            for (Entity entity : mc.level.getEntities(mc.player, searchBox,
+                candidate -> candidate instanceof AbstractBoat boat && boat.isAlive() && boat.getPassengers().isEmpty())) {
+                if (!(entity instanceof AbstractBoat boat)) continue;
+
+                double targetDistance = boat.position().distanceToSqr(boatTarget);
+                if (targetDistance > 36 || targetDistance >= closestDistance) continue;
+
+                closestBoat = boat;
+                closestDistance = targetDistance;
+            }
+
+            if (closestBoat != null) {
+                // A chest boat opens its inventory while sneaking; temporarily release sneak so
+                // the interaction always attempts to mount, regardless of boat variant.
+                boolean wasSneaking = mc.player.isShiftKeyDown();
+                mc.player.setShiftKeyDown(false);
+                try {
+                    EntityHitResult hit = new EntityHitResult(closestBoat, closestBoat.getBoundingBox().getCenter());
+                    mc.gameMode.interact(mc.player, closestBoat, hit, InteractionHand.MAIN_HAND);
+                } finally {
+                    mc.player.setShiftKeyDown(wasSneaking);
+                }
             }
             return;
         }
@@ -376,6 +399,8 @@ public class NoFall extends Module {
 
         if (mc.player.getDeltaMovement().y >= 0 || mc.player.isInWater()) return;
 
+        // ItemTags.BOATS contains regular boats, chest boats and rafts. This also includes
+        // new vanilla variants added by the current Minecraft version.
         FindItemResult boatItem = InvUtils.findInHotbar(stack -> stack.is(ItemTags.BOATS));
         if (!boatItem.found()) return;
 
@@ -392,7 +417,7 @@ public class NoFall extends Module {
             boatTimer = 0;
             boatCooldown = 0;
         } else {
-            // Retry on the next tick: PASS often means the view ray has not reached the predicted surface yet.
+            // Retry on the next tick as the predicted landing point changes with player motion.
             boatCooldown = 1;
         }
     }
@@ -470,7 +495,7 @@ public class NoFall extends Module {
             input.z * Math.cos(yaw) + input.x * Math.sin(yaw));
 
         // Simulate only the nearby landing window, without changing the player's movement.
-        int predictionTicks = mode.get() == Mode.Place && placedItem.get() == PlacedItem.Boat ? 20 : 8;
+        int predictionTicks = mode.get() == Mode.Place && placedItem.get() == PlacedItem.Boat ? 128 : 8;
         for (int tick = 0; tick < predictionTicks; tick++) {
             velocity = velocity.add(acceleration);
             Vec3 movement = Entity.collideBoundingBox(mc.player, velocity, box, mc.level,
